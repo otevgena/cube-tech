@@ -25,9 +25,12 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run build
+      # SPA fallback: прямые заходы на /services /projects и т.д.
+      - run: cp dist/index.html dist/404.html
       - uses: actions/upload-pages-artifact@v3
         with:
           path: ./dist
+
   deploy:
     needs: build
     runs-on: ubuntu-latest

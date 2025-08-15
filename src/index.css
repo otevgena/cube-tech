@@ -15,3 +15,17 @@ body {
   font-family: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI",
                Roboto, Helvetica, Arial, "Apple Color Emoji","Segoe UI Emoji";
 }
+
+/* === Custom scrollbar: dark track + light thumb === */
+/* Chrome / Edge / Safari */
+*::-webkit-scrollbar { width: 12px; }
+*::-webkit-scrollbar-track { background: #121212; }
+*::-webkit-scrollbar-thumb {
+  background: #8a8a8a;       /* сам ползунок */
+  border-radius: 10px;
+  border: 3px solid #121212; /* чтобы был зазор и скругление как на макете */
+}
+*::-webkit-scrollbar-thumb:hover { background: #a6a6a6; }
+
+/* Firefox */
+html { scrollbar-color: #8a8a8a #121212; scrollbar-width: thin; }
