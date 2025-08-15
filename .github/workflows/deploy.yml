@@ -19,14 +19,24 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-node@v4
         with:
           node-version: 20
           cache: npm
+
       - run: npm ci
       - run: npm run build
-      # SPA fallback: прямые заходы на /services /projects и т.д.
-      - run: cp dist/index.html dist/404.html
+
+      # 👇 SPA-фолбэк: 404.html = index.html
+      - name: Create SPA fallback (404.html)
+        run: cp dist/index.html dist/404.html
+
+      # CNAME для домена (если у тебя CNAME лежит в public — шаг не нужен)
+      - name: Keep CNAME (optional)
+        if: hashFiles('public/CNAME') != ''
+        run: cp public/CNAME dist/CNAME
+
       - uses: actions/upload-pages-artifact@v3
         with:
           path: ./dist
