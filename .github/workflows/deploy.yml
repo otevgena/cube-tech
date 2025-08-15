@@ -32,6 +32,20 @@ jobs:
       - name: Create SPA fallback (404.html)
         run: cp dist/index.html dist/404.html
 
+      # 👇 Диагностика №1: показать начало итогового index.html из dist
+      - name: Debug built index.html (head)
+        run: |
+          echo "---- dist/index.html (first 120 lines) ----"
+          sed -n '1,120p' dist/index.html
+
+      # 👇 Диагностика №2: показать структуру папки dist (первые уровни)
+      - name: Debug dist tree
+        run: |
+          echo "---- dist listing ----"
+          ls -la dist
+          echo "---- dist first-level files ----"
+          find dist -maxdepth 2 -type f | sort
+
       # CNAME для домена (если у тебя CNAME лежит в public — шаг не нужен)
       - name: Keep CNAME (optional)
         if: hashFiles('public/CNAME') != ''
