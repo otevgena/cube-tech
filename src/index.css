@@ -29,3 +29,13 @@ body {
 
 /* Firefox */
 html { scrollbar-color: #8a8a8a #121212; scrollbar-width: thin; }
+
+/* --- Projects: плавное появление цвета на изображении --- */
+.proj-img {
+  filter: grayscale(100%);
+  transition: filter 700ms ease;
+  will-change: filter;
+}
+.group:hover .proj-img {
+  filter: grayscale(0%);
+}

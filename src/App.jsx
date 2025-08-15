@@ -5,6 +5,11 @@ import {
   Phone, Mail, MapPin, CheckCircle2, ChevronDown, Undo2, Star,
   Search as SearchIcon, ChevronLeft, ChevronRight, X, Lock
 } from "lucide-react";
+
+import { MapContainer, TileLayer, Marker, Popup, Tooltip, Pane, Rectangle, useMap } from "react-leaflet";
+import L from "leaflet";
+import "leaflet/dist/leaflet.css";
+
 import logo from "/logo-cube.png";
 import loaderLogo from "/logo-cube3.png";
 
@@ -107,6 +112,27 @@ function useEndFade(sectionRef, spanVH = 25, startVH = 75) {
   return fade;
 }
 
+/* ---- image preload helpers ---- */
+async function decodeOnce(src) {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => {
+      if (img.decode) {
+        img.decode().catch(() => {}).finally(resolve);
+      } else {
+        resolve();
+      }
+    };
+    img.onerror = () => resolve();
+    img.src = src;
+  });
+}
+async function preloadImages(urls, capMs = 2500) {
+  const task = Promise.all(urls.map(decodeOnce));
+  const timeout = new Promise((r) => setTimeout(r, capMs));
+  await Promise.race([task, timeout]);
+}
+
 /* ---------------- small UI ---------------- */
 function TooltipPill({ label }) {
   return (
@@ -153,7 +179,7 @@ function Loader({ show }) {
   );
 }
 
-/* ---------------- AUTH MODAL (shake on error) ---------------- */
+/* ---------------- AUTH MODAL ---------------- */
 function AuthModal({ open, onClose, onLogin }) {
   const ref = useRef(null);
   useClickOutside(ref, () => open && onClose());
@@ -237,8 +263,10 @@ function AuthModal({ open, onClose, onLogin }) {
                 <X className="w-5 h-5" />
               </button>
               <div className="grid place-items-center">
-                <span className="block h-10 w-20"
-                  style={{ WebkitMask:`url(${loaderLogo}) center / contain no-repeat`, mask:`url(${loaderLogo}) center / contain no-repeat`, backgroundColor:"#fff" }} />
+                <span
+                  className="block h-10 w-20"
+                  style={{ WebkitMask:`url(${loaderLogo}) center / contain no-repeat`, mask:`url(${loaderLogo}) center / contain no-repeat`, backgroundColor:"#fff" }}
+                />
               </div>
               <div className={titleCls}>
                 {mode === "login" && "Вход"}
@@ -347,6 +375,7 @@ function AuthModal({ open, onClose, onLogin }) {
   );
 }
 
+
 /* ---------------- NAV ---------------- */
 function Nav({ navigate, activeId, serviceStep, indexForSearch, onOpenAuth, userEmail }) {
   const [searchOpen, setSearchOpen] = useState(false);
@@ -378,15 +407,47 @@ function Nav({ navigate, activeId, serviceStep, indexForSearch, onOpenAuth, user
 
   return (
     <header className="fixed top-0 left-0 right-0 z-50 bg-black">
+      {/* локальные стили: эффект «из центра» — две шторки расходятся к бокам */}
+      <style>{`
+        .kub-reveal{ position:relative; display:inline-block; }
+        .kub-reveal::before, .kub-reveal::after{
+          content:""; position:absolute; top:0; bottom:0; width:50%;
+          background:#000; transition:width .35s ease;
+        }
+        .kub-reveal::before{ left:0; }
+        .kub-reveal::after{ right:0; }
+        .group:hover .kub-reveal::before,
+        .group:hover .kub-reveal::after{ width:0; }
+      `}</style>
+
+      {/* desktop */}
       <div className="hidden md:grid h-20 w-full grid-cols-[auto,1fr,auto] items-center">
-        <a href="/" onClick={(e)=>{e.preventDefault();navigate("/",null);}} className="group relative flex items-center pl-3">
-          <span
-            className="block h-16 w-28 bg-white transition-colors duration-150 group-hover:bg-amber-400"
-            style={{ WebkitMask:`url(${logo}) center / contain no-repeat`, mask:`url(${logo}) center / contain no-repeat` }}
-            aria-label="КУБ"
-          />
+        {/* ЛОГО + “КУБ”: справа, чуть дальше (чтобы ровно), крупнее; появление из центра */}
+        <a
+          href="/"
+          onClick={(e)=>{e.preventDefault();navigate("/",null);}}
+          className="group relative flex items-center pl-3"
+        >
+          <span className="relative block">
+            {/* логотип — золотится при hover */}
+            <span
+              className="block h-16 w-28 bg-white transition-colors duration-150 group-hover:bg-amber-400"
+              style={{ WebkitMask:`url(${logo}) center / contain no-repeat`, mask:`url(${logo}) center / contain no-repeat` }}
+              aria-label="КУБ"
+            />
+            {/* “КУБ” — сразу справа, чуть сдвинут направо (-ml-5), без подчёркиваний */}
+            <span
+              className="pointer-events-none absolute left-full -ml-5 top-1/2 -translate-y-1/2 z-[2]
+                         opacity-0 scale-95 group-hover:opacity-100 group-hover:scale-100
+                         transition-all duration-300"
+              style={{ fontFamily: "'Arial Narrow', Arial, 'Inter', sans-serif", color: "#fbbf24", fontWeight: 800, fontSize: "28px", letterSpacing: ".2px" }}
+            >
+              <span className="kub-reveal">КУБ</span>
+            </span>
+          </span>
         </a>
 
+        {/* навигация */}
         <nav className="hidden md:flex items-center justify-center gap-8 text-sm">
           {items.map((item) => {
             const active = activeId === item.id;
@@ -414,7 +475,7 @@ function Nav({ navigate, activeId, serviceStep, indexForSearch, onOpenAuth, user
           })}
         </nav>
 
-        {/* icons — слегка левее */}
+        {/* иконки справа */}
         <div className="hidden md:flex items-center gap-6 text-neutral-200 justify-self-end pr-5">
           {/* SEARCH */}
           <div className="relative group flex items-center" ref={searchWrapRef}>
@@ -512,81 +573,124 @@ function Nav({ navigate, activeId, serviceStep, indexForSearch, onOpenAuth, user
 
       {/* mobile */}
       <div className="md:hidden h-16 px-3 flex items-center justify-between">
-        <button aria-label="Меню" className="text-neutral-200">
-          <svg width="26" height="26" viewBox="0 0 24 24" fill="none"><path d="M4 6h16M4 12h16M4 18h16" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/></svg>
-        </button>
-        <a href="/" onClick={(e)=>{e.preventDefault();window.history.pushState({}, "", "/"); window.scrollTo({top:0, behavior:"smooth"});}} className="group">
-          <span className="block h-8 w-14 bg-white transition-colors duration-150 group-hover:bg-amber-400"
-                style={{ WebkitMask:`url(${logo}) center / contain no-repeat`, mask:`url(${logo}) center / contain no-repeat` }} />
+        <a
+          href="/"
+          onClick={(e)=>{e.preventDefault();window.history.pushState({}, "", "/"); window.scrollTo({top:0, behavior:"smooth"});}}
+          className="group"
+        >
+          <span
+            className="block h-8 w-14 bg-white transition-colors duration-150 group-hover:bg-amber-400"
+            style={{ WebkitMask:`url(${logo}) center / contain no-repeat`, mask:`url(${logo}) center / contain no-repeat` }}
+          />
         </a>
         <div className="flex items-center gap-5 text-neutral-200">
           <SearchIcon className="w-6 h-6"/>
-          <svg viewBox="0 0 24 24" className="w-6 h-6" fill="none"><path d="M20 21a8 8 0 1 0-16 0" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/><circle cx="12" cy="7" r="4" stroke="currentColor" strokeWidth="2"/></svg>
-          <svg viewBox="0 0 24 24" className="w-6 h-6" fill="none"><path d="M6 6h15l-1.5 9h-12L6 6Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/><circle cx="9" cy="20" r="1.5" fill="currentColor"/><circle cx="18" cy="20" r="1.5" fill="currentColor"/></svg>
+          <svg viewBox="0 0 24 24" className="w-6 h-6" fill="none">
+            <path d="M20 21a8 8 0 1 0-16 0" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+            <circle cx="12" cy="7" r="4" stroke="currentColor" strokeWidth="2"/>
+          </svg>
+          <svg viewBox="0 0 24 24" className="w-6 h-6" fill="none">
+            <path d="M6 6h15l-1.5 9h-12L6 6Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+            <circle cx="9" cy="20" r="1.5" fill="currentColor"/>
+            <circle cx="18" cy="20" r="1.5" fill="currentColor"/>
+          </svg>
         </div>
       </div>
     </header>
   );
 }
 
+
 /* ---------------- SERVICES data ---------------- */
 const servicesData = [
-  { id:"s1", icon:<Cable className="w-6 h-6"/>, title:"Слаботочные системы", blurb:"СКС, видеонаблюдение, СКУД, ОПС, связь", image:"/low_current_systems.png",
+  { id:"s1", icon:<Cable className="w-6 h-6"/>, title:"Слаботочные системы", blurb:"СКС, видеонаблюдение, СКУД, ОПС, связь", image:"/low_current_systems-1920",
     details:["Проектирование и обследование","Монтаж и пусконаладка","Интеграция с IT-инфраструктурой","Сервис и регламентные работы"] },
-  { id:"s2", icon:<Wrench className="w-6 h-6"/>, title:"Электросети", blurb:"Внутренние/наружные сети, щиты, заземление, освещение", image:"/electrical.png",
+  { id:"s2", icon:<Wrench className="w-6 h-6"/>, title:"Электросети", blurb:"Внутренние/наружные сети, щиты, заземление, освещение", image:"/electrical-1920",
     details:["Расчёт нагрузок, подбор автоматики","Монтаж кабельных линий","Проверки ПУЭ / ПТЭЭП / ГОСТ","Исполнительная документация"] },
-  { id:"s3", icon:<Fan className="w-6 h-6"/>, title:"Вентиляция и кондиционирование", blurb:"ПВУ, дымоудаление, чиллер-фанкойлы, автоматика", image:"/ventilation.png",
+  { id:"s3", icon:<Fan className="w-6 h-6"/>, title:"Вентиляция и кондиционирование", blurb:"ПВУ, дымоудаление, чиллер-фанкойлы, автоматика", image:"/ventilation-1920",
     details:["Аэродинамические расчёты","Монтаж воздуховодов и агрегатов","Автоматика и диспетчеризация","Паспортные испытания"] },
-  { id:"s4", icon:<Building2 className="w-6 h-6"/>, title:"Общестрой под ключ", blurb:"Комплекс СМР: от демонтажа до чистовой отделки", image:"/construction.png",
+  { id:"s4", icon:<Building2 className="w-6 h-6"/>, title:"Общестрой под ключ", blurb:"Комплекс СМР: от демонтажа до чистовой отделки", image:"/construction-1920",
     details:["Генподряд и управление проектом","Координация субподрядчиков","Технадзор и охрана труда","Сроки и бюджет под контролем"] },
 ];
 
+// helper для карточек проектов
+const toOptimized = (src) => {
+  if (!src) return { webp: "", jpg: "" };
+  const dot = src.lastIndexOf(".");
+  const base = dot >= 0 ? src.slice(0, dot) : src;
+  return { webp: `${base}-1200.webp`, jpg: `${base}-1200.jpg` };
+};
+
+/* ---------------- Service Overlay ---------------- */
 /* ---------------- Service Overlay ---------------- */
 function ServiceOverlay({ openId, onClose }) {
-  const textStyle = { fontFamily: "'Arial Narrow', Arial, 'Inter', sans-serif" };
+  const ref = useRef(null);
+  useClickOutside(ref, () => openId && onClose?.());
+
+  useEffect(() => {
+    const onEsc = (e) => { if (e.key === "Escape" && openId) onClose?.(); };
+    document.addEventListener("keydown", onEsc);
+    return () => document.removeEventListener("keydown", onEsc);
+  }, [openId, onClose]);
+
   const isS1 = openId === "s1";
 
   return (
     <AnimatePresence>
       {openId && (
         <>
-          {/* затемнение (изображение «серееет») */}
+          {/* затемняющая подложка */}
           <motion.div
-            initial={{ opacity: 0 }} animate={{ opacity: 0.8 }} exit={{ opacity: 0 }}
-            className="fixed inset-0 top-20 z-[39] bg-black"
+            key="overlay-backdrop"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 0.8 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[95] bg-black"
           />
-          {/* белый лист (не закрывает шапку) */}
+          {/* панель */}
           <motion.div
-            initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: 20, opacity: 0 }}
+            key="overlay-panel-wrap"
+            initial={{ y: 20, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            exit={{ y: 20, opacity: 0 }}
             transition={{ type: "spring", stiffness: 260, damping: 26 }}
-            className="fixed inset-x-0 top-20 bottom-0 z-[40] overflow-auto bg-white"
+            className="fixed inset-x-0 top-20 bottom-0 z-[100] overflow-auto"
           >
-            <div className="max-w-5xl mx-auto px-6 py-10">
-              <div className="flex items-start justify-between">
-                <h3 className="text-4xl md:text-5xl font-extrabold text-center w-full">{
-                  isS1 ? "Слаботочные системы" : "Услуга"
-                }</h3>
-                <button onClick={onClose} className="absolute right-6 top-6 text-neutral-500 hover:text-black" aria-label="Закрыть">
+            <div
+              ref={ref}
+              className="mx-auto max-w-5xl bg-white rounded-t-2xl md:rounded-2xl border border-neutral-200 shadow-2xl overflow-hidden"
+            >
+              <div className="relative px-6 md:px-8 pt-6 pb-4 border-b border-neutral-200">
+                <button
+                  onClick={onClose}
+                  className="absolute right-4 top-4 text-neutral-500 hover:text-black"
+                  aria-label="Закрыть"
+                >
                   <X className="w-6 h-6" />
                 </button>
+                <h3 className="text-3xl md:text-4xl font-extrabold tracking-tight text-center">
+                  {isS1 ? "Слаботочные системы" : "Услуга"}
+                </h3>
               </div>
 
-              <div className="mt-8 prose max-w-none text-[17px] leading-7 text-neutral-800" style={textStyle}>
-                {isS1 ? (
-                  <>
-                    <p><b>СКС.</b> Проектируем и строим структурированные кабельные системы под текущие и будущие нагрузки: трассировка, выбор категории кабеля, организация стоек и узлов, аккуратная коммутация. Выполняем маркировку и сертификационные измерения линий, передаём заказчику адресный план и исполнительные схемы.</p>
-                    <p><b>Видеонаблюдение.</b> Подбираем камеры и оптику под реальные условия, рассчитываем углы обзора и зоны детекции, строим PoE-инфраструктуру и настраиваем запись архива на нужный срок. Реализуем сценарии аналитики, удалённый доступ и интеграцию с СКУД для быстрого поиска событий.</p>
-                    <p><b>СКУД.</b> Оснащаем двери, турникеты и калитки, настраиваем контроллеры, считыватели и замки с учётом требований безопасности и эвакуации. Разрабатываем роли и расписания доступа, ведём журналы событий, интегрируемся с 1С/Active Directory и видеосистемой.</p>
-                    <p><b>ОПС и СОУЭ.</b> Проектируем и монтируем охранно-пожарную сигнализацию и оповещение: от шлейфов и адресации до сценариев пуска. Выполняем пусконаладку, проверяем работоспособность зон, настраиваем уровни звукового давления, проводим испытания и оформляем акты.</p>
-                    <p><b>Связь.</b> Разворачиваем корпоративную телефонию и сетевые сервисы, настраиваем коммутаторы и маршрутизаторы, обеспечиваем устойчивый Wi-Fi-роуминг и, при необходимости, резервные каналы связи. Предусматриваем мониторинг, резервное копирование конфигураций и защиту периметра.</p>
-                    <p><b>Проектирование и обследование.</b> Начинаем с выезда и инструментального осмотра, фиксируем текущее состояние трасс и узлов, проводим замеры и формируем техническое задание. Выпускаем проект/РД со спецификациями и ведомостью объёмов, согласуем решения с ИТ-службой и эксплуатацией.</p>
-                    <p><b>Монтаж и пусконаладка.</b> Монтаж ведём аккуратно и поэтапно, не останавливая работу офиса: прокладка трасс, герметизация и огнезащита проходок, установка оборудования и подключение. На ПНР проверяем каждый канал и устройство, обучаем персонал и передаём комплект исполнительной документации.</p>
-                    <p><b>Интеграция с IT-инфраструктурой.</b> Настраиваем сеть под требования систем: VLAN, PoE, QoS, маршрутизацию и права. Объединяем СКС, видеонаблюдение, СКУД и ОПС в единую экосистему с централизованным управлением и резервированием, документируем все параметры.</p>
-                    <p><b>Сервис и регламентные работы.</b> Берём системы на обслуживание с понятным чек-листом: периодические проверки, тестирование аварийных сценариев, обновления прошивок, контроль архива и журналов событий. Обеспечиваем оперативные выезды по SLA и ведём необходимую эксплуатационную документацию.</p>
-                  </>
-                ) : (
-                  <p>Детальное описание услуги появится позже.</p>
-                )}
+              <div className="px-6 md:px-8 py-8">
+                <div className="prose max-w-none text-[17px] leading-7 text-neutral-800">
+                  {isS1 ? (
+                    <>
+                      <p><b>СКС.</b> Проектируем и строим структурированные кабельные системы под текущие и будущие нагрузки. Паспортизация линий, маркировка, планы трасс.</p>
+                      <p><b>Видеонаблюдение.</b> Камеры, оптика, серверы хранения, аналитика, удалённый доступ. Подбор под освещённость и задачи.</p>
+                      <p><b>СКУД.</b> Двери, турникеты, калитки, интеграция с 1С/HR, анти-passback, гостевой доступ.</p>
+                      <p><b>ОПС и СОУЭ.</b> Охранно-пожарная сигнализация, оповещение, диспетчеризация, согласование с надзором.</p>
+                      <p><b>Связь.</b> IP-телефония, мини-АТС, проводная/беспроводная инфраструктура, QoS.</p>
+                      <p><b>Проектирование и обследование.</b> Выезд, инструментальные замеры, рабочая и исполнительная документация.</p>
+                      <p><b>Монтаж и ПНР.</b> Этапами, с контролем качества и сроков. Аккуратная укладка трасс, соблюдение НТД.</p>
+                      <p><b>Интеграция с IT.</b> Сети, VLAN, PoE-нагрузки, мониторинг, журналирование.</p>
+                      <p><b>Сервис.</b> Договорное обслуживание, регламент, SLA, аварийные выезды 24/7.</p>
+                    </>
+                  ) : (
+                    <p>Детальное описание услуги появится позже. Скажи, какую именно услугу открыть, и я заполню раздел.</p>
+                  )}
+                </div>
               </div>
             </div>
           </motion.div>
@@ -595,8 +699,7 @@ function ServiceOverlay({ openId, onClose }) {
     </AnimatePresence>
   );
 }
-
-/* ---------------- HERO + sticky services ---------------- */
+/* ---------------- HERO + sticky services (с учетом -1920 и <picture>) ---------------- */
 function Showcase({ servicesRangeRef, onServiceStepChange, onOpenService }) {
   const sectionRef = useRef(null);
   const heroRef = useRef(null);
@@ -605,6 +708,9 @@ function Showcase({ servicesRangeRef, onServiceStepChange, onOpenService }) {
   const [blend, setBlend] = useState(0);
   const IMG_POS = "30% center";
   const endFade = useEndFade(sectionRef, 25, 75);
+
+  const imageBases = useMemo(()=>["/image1-1920", ...servicesData.map(s=>s.image)],[]);
+  const nextIdx = Math.min(baseIdx+1, imageBases.length-1);
 
   useEffect(() => {
     let raf = 0; let lastStep = -1;
@@ -623,7 +729,7 @@ function Showcase({ servicesRangeRef, onServiceStepChange, onOpenService }) {
           const a=centers[i], b=centers[i+1];
           if (anchor>=a && anchor<=b){
             const t=(anchor-a)/(b-a);
-            const start=0.30, end=0.80; // позже и мягче
+            const start=0.30, end=0.80;
             const p = t<=start?0 : t>=end?1 : (t-start)/(end-start);
             setBaseIdx(i); setBlend(Math.max(0,Math.min(1,p)));
             break;
@@ -631,7 +737,6 @@ function Showcase({ servicesRangeRef, onServiceStepChange, onOpenService }) {
         }
       }
 
-      // палочки
       const sRects = serviceRefs.current.map(r=>r.current?.getBoundingClientRect()).filter(Boolean);
       if (sRects.length){
         const sCenters = sRects.map(r=>(r.top+r.bottom)/2 + window.scrollY);
@@ -649,9 +754,16 @@ function Showcase({ servicesRangeRef, onServiceStepChange, onOpenService }) {
     return () => { window.removeEventListener("scroll", onScroll); window.removeEventListener("resize", onScroll); if (raf) cancelAnimationFrame(raf); };
   }, [onServiceStepChange]);
 
-  const images = useMemo(()=>["/image1.png", ...servicesData.map(s=>s.image)],[]);
-  const nextIdx = Math.min(baseIdx+1, images.length-1);
-  const clipBottomPct = baseIdx===images.length-1 ? 100 : 100 - blend*100; // сверху-вниз
+  // подгружаем «следующие»
+  useEffect(() => {
+    const webp = (b) => `${b}.webp`;
+    const next2 = Math.min(nextIdx + 1, imageBases.length - 1);
+    decodeOnce(webp(imageBases[nextIdx]));
+    decodeOnce(webp(imageBases[next2]));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [nextIdx]);
+
+  const clipBottomPct = baseIdx===imageBases.length-1 ? 100 : 100 - blend*100;
 
   return (
     <section ref={sectionRef} className="bg-white text-black">
@@ -686,10 +798,7 @@ function Showcase({ servicesRangeRef, onServiceStepChange, onOpenService }) {
                     {s.details.map((d,i)=>(<li key={i} className="flex items-start gap-2 text-base"><CheckCircle2 className="w-4 h-4 mt-1"/>{d}</li>))}
                   </ul>
                   <div className="mt-8">
-                    <button
-                      onClick={()=>onOpenService(s.id)}
-                      className="inline-flex items-center gap-2 bg-black text-white px-6 py-3 rounded-xl font-medium hover:opacity-90"
-                    >
+                    <button onClick={()=>onOpenService(s.id)} className="inline-flex items-center gap-2 bg-black text-white px-6 py-3 rounded-xl font-medium hover:opacity-90">
                       Подробнее <ArrowRight className="w-5 h-5"/>
                     </button>
                   </div>
@@ -699,21 +808,32 @@ function Showcase({ servicesRangeRef, onServiceStepChange, onOpenService }) {
           </div>
         </div>
 
-        {/* right sticky with wipe */}
+        {/* right sticky: два picture-слоя, верхний клипуем */}
         <div className="relative">
           <div className="sticky top-0 h-screen overflow-hidden">
-            <img src={images[baseIdx]}  alt="" className="absolute inset-0 w-full h-full object-cover" style={{objectPosition:IMG_POS}}/>
-            <img src={images[nextIdx]} alt="" className="absolute inset-0 w-full h-full object-cover"
-                 style={{objectPosition:IMG_POS, clipPath:`inset(0% 0% ${clipBottomPct}% 0%)`, willChange:"clip-path"}}/>
+            {/* base */}
+            <div className="absolute inset-0">
+              <picture>
+                <source srcSet={`${imageBases[baseIdx]}.webp`} type="image/webp" />
+                <img src={`${imageBases[baseIdx]}.jpg`} alt="" className="w-full h-full object-cover" style={{objectPosition:IMG_POS}} loading="eager" decoding="async" fetchpriority="high"/>
+              </picture>
+            </div>
+            {/* next with wipe top->down */}
+            <div className="absolute inset-0" style={{ clipPath:`inset(0% 0% ${clipBottomPct}% 0%)`, willChange:"clip-path" }}>
+              <picture>
+                <source srcSet={`${imageBases[nextIdx]}.webp`} type="image/webp" />
+                <img src={`${imageBases[nextIdx]}.jpg`} alt="" className="w-full h-full object-cover" style={{objectPosition:IMG_POS}} loading="eager" decoding="async"/>
+              </picture>
+            </div>
           </div>
         </div>
       </div>
 
-      {/* mobile (коротко) */}
+      {/* mobile (кратко) */}
       <div className="md:hidden">
         <div className="px-5 pt-6">
           <h1 className="text-3xl font-extrabold leading-tight text-center">Инженерные системы под ключ</h1>
-          <div className="mt-6"><img src="/image1.png" alt="" className="w-full h-64 object-cover" style={{objectPosition:"30% center"}}/></div>
+          <div className="mt-6"><img src="/image1-1920.jpg" alt="" className="w-full h-64 object-cover" style={{objectPosition:"30% center"}}/></div>
           <div className="mt-6 flex justify-center">
             <a href="#services" onClick={(e)=>{e.preventDefault();document.getElementById("services")?.scrollIntoView({behavior:"smooth"});}}
                className="inline-flex items-center gap-2 bg-black text-white px-6 py-3 rounded-xl font-medium">
@@ -725,7 +845,7 @@ function Showcase({ servicesRangeRef, onServiceStepChange, onOpenService }) {
         <div className="mt-6 px-5">
           {servicesData.map((s)=>(
             <div key={s.id} className="mb-10" id={s.id}>
-              <img src={s.image} alt={s.title} className="w-full h-56 object-cover" style={{objectPosition:"30% center"}}/>
+              <img src={`${s.image}.jpg`} alt={s.title} className="w-full h-56 object-cover" style={{objectPosition:"30% center"}}/>
               <div className="mt-4">
                 <div className="flex items-center gap-3">
                   <div className="p-2 bg-neutral-100 border border-neutral-200 rounded-md">{s.icon}</div>
@@ -751,17 +871,16 @@ function Showcase({ servicesRangeRef, onServiceStepChange, onOpenService }) {
 
 /* ---------------- PROJECTS ---------------- */
 const projects = [
-  // помечаем «Новый» вручную для RMM
   { title:"Учебный центр «Газпромнефть»", tag:"СКС + ОПС + Электроснабжение", city:"Ноябрьск",
     service:"СКС + ОПС + Электроснабжение", tags:["СКС","ОПС","Электроснабжение"], date:"2025-03-10", isNew:true,
     images:["/objects/RMM/1.jpeg","/objects/RMM/2.jpeg","/objects/RMM/3.jpeg"] },
-  { title:"Ресторан «FRANK by БАСТА»",     tag:"ОПС + ВПВ", city:"Тюмень",
+  { title:"Ресторан «FRANK by БАСТА»", tag:"ОПС + ВПВ", city:"Тюмень",
     service:"ОПС + ВПВ", tags:["ОПС","ВПВ"], date:"2025-05-28",
     images:["/objects/Frank/1.jpg","/objects/Frank/2.jpg"] },
-  { title:"АБК «Газпром инвест»",          tag:"Обследование инженерных систем", city:"Ноябрьск",
+  { title:"АБК «Газпром инвест»", tag:"Обследование инженерных систем", city:"Ноябрьск",
     service:"Обследование инженерных систем", tags:["Обследование инженерных систем"], date:"2025-01-15",
     images:["/objects/Lenina/1.jpg","/objects/Lenina/2.jpg","/objects/Lenina/3.jpg","/objects/Lenina/4.jpg","/objects/Lenina/5.jpg"] },
-  { title:"«Газпром инвест»",              tag:"Восстановление СКС, ОПС", city:"Ноябрьск",
+  { title:"«Газпром инвест»", tag:"Восстановление СКС, ОПС", city:"Ноябрьск",
     service:"Восстановление СКС, ОПС", tags:["СКС","ОПС"], date:"2024-09-07",
     images:["/objects/Invest/1.jpg","/objects/Invest/2.jpg"] },
 ];
@@ -775,7 +894,7 @@ function MultiFilterButton({ id, label, selectedSet, options, onToggle, openId, 
       <button
         type="button"
         onClick={() => setOpenId(open ? null : id)}
-        className="h-[40px] min-w-[120px] px-3 pr-8 text-left text-[13px] text-neutral-900 inline-flex items-center relative rounded-md transition-colors"
+        className="h-[40px] px-3 pr-8 text-left text-[13px] text-neutral-900 inline-flex items-center relative rounded-md transition-colors w-auto min-w-0 whitespace-nowrap"
         style={{ backgroundColor: FILTER_BG }}
         onMouseEnter={(e)=>e.currentTarget.style.backgroundColor = FILTER_BG_HOVER}
         onMouseLeave={(e)=>e.currentTarget.style.backgroundColor = FILTER_BG}
@@ -788,14 +907,14 @@ function MultiFilterButton({ id, label, selectedSet, options, onToggle, openId, 
       </button>
 
       {open && (
-        <div className="absolute z-30 mt-2 rounded-md shadow-md overflow-hidden p-1" style={{ backgroundColor: FILTER_BG, minWidth: 260 }}>
+        <div className="absolute z-30 mt-2 rounded-md shadow-md overflow-hidden p-1 min-w-max" style={{ backgroundColor: FILTER_BG }}>
           {options.map((opt)=> {
             const checked = selectedSet.has(opt.value);
             return (
               <button
                 key={opt.value}
                 onClick={()=> onToggle(opt.value)}
-                className="flex items-center w-full gap-2 px-3 py-2 text-left text-[13px] text-neutral-900 leading-tight transition-colors"
+                className="flex items-center w-full gap-2 px-3 py-2 text-left text-[13px] text-neutral-900 leading-tight transition-colors whitespace-nowrap"
                 style={{ backgroundColor: FILTER_BG }}
                 onMouseEnter={(e)=>e.currentTarget.style.backgroundColor = DROPDOWN_HOVER}
                 onMouseLeave={(e)=>e.currentTarget.style.backgroundColor = FILTER_BG}
@@ -866,7 +985,10 @@ function ProjectsFilters({ filters, setFilters, yearsOpts, serviceOpts, cityOpts
 
 function ProjectCard({ project }) {
   const [i, setI] = useState(0);
-  const many = project.images.length > 1;
+  const many = project.images?.length > 1;
+  const cur = project.images?.[i] || "";
+  const { webp, jpg } = toOptimized(cur || "/placeholder");
+  const [loaded, setLoaded] = useState(false);
 
   const prev = () => setI(idx => (idx - 1 + project.images.length) % project.images.length);
   const next = () => setI(idx => (idx + 1) % project.images.length);
@@ -882,13 +1004,22 @@ function ProjectCard({ project }) {
       <div className="p-2.5">
         <div className="relative aspect-[4/5] overflow-hidden rounded-md bg-white group">
           <AnimatePresence mode="wait">
-            <motion.img
-              key={project.images[i]}
-              src={project.images[i]}
-              alt={project.title}
-              className="absolute inset-0 w-full h-full object-cover"
-              initial={{ opacity: 0.25 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.2 }}
-            />
+            <motion.div key={cur} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.25 }} className="absolute inset-0">
+              <picture>
+                <source srcSet={webp} type="image/webp" />
+                <img
+                  src={jpg}
+                  alt={project.title}
+                  className={`w-full h-full object-cover transition-[filter] duration-[1500ms] ease-[cubic-bezier(0.22,1,0.36,1)] grayscale saturate-0 brightness-[0.88] group-hover:grayscale-0 group-hover:saturate-100 group-hover:brightness-100 ${loaded ? "opacity-100" : "opacity-0"}`}
+                  loading="lazy"
+                  decoding="async"
+                  onLoad={() => setLoaded(true)}
+                  onError={() => setLoaded(true)}
+                />
+              </picture>
+              {/* лёгкая вуаль (становится прозрачной на hover) */}
+              <div className="absolute inset-0 pointer-events-none transition-opacity duration-[1500ms] ease-[cubic-bezier(0.22,1,0.36,1)] bg-neutral-500/10 group-hover:opacity-0" />
+            </motion.div>
           </AnimatePresence>
 
           {many && (
@@ -992,6 +1123,169 @@ function Projects({ sectionRef }) {
   );
 }
 
+/* ---------------- MAP (CompanyMap) ---------------- */
+function CompanyMap({ projects }) {
+  const TILE_LIGHT_NO_LABELS = "https://{s}.basemaps.cartocdn.com/light_nolabels/{z}/{x}/{y}{r}.png";
+  const MAP_ATTR = "© OpenStreetMap contributors · © CARTO";
+
+  const CITY_COORDS = {
+    "Ноябрьск": [63.201, 75.451],
+    "Тюмень":   [57.153, 65.534],
+    "Сургут":   [61.254, 73.396],
+  };
+
+  function createPinIcon(size = 16, color = GOLD) {
+    const border = "#111";
+    const html = `
+      <div style="
+        width:${size}px;height:${size}px;border-radius:50%;
+        background:${color};border:2px solid ${border};
+        box-shadow:0 0 0 3px rgba(0,0,0,.25);
+        transform:translate(-50%,-50%);
+      "></div>
+    `;
+    return L.divIcon({
+      html,
+      className: "kub-pin",
+      iconSize: [size, size],
+      iconAnchor: [size / 2, size / 2],
+    });
+  }
+
+  // подпись: чуть левее и выше пина (X: -56% вместо -50%, Y: -210%)
+  function createCityLabelIcon(text) {
+    const safe = String(text || "");
+    const html = `
+      <span style="
+        position:absolute; left:50%; top:0; transform:translate(-56%,-210%);
+        font-family: 'Arial Narrow', Arial, 'Inter', sans-serif;
+        font-size:14px; line-height:1; font-weight:700;
+        letter-spacing:.2px; color:#111; background:transparent;
+        padding:2px 4px; border-radius:6px;
+        pointer-events:none; white-space:nowrap;
+        text-shadow: 0 1px 0 rgba(255,255,255,.5);
+      ">${safe}</span>
+    `;
+    return L.divIcon({ html, className: "kub-city-label", iconSize: [0, 0], iconAnchor: [0, 0] });
+  }
+
+  function FitBounds({ bounds }) {
+    const map = useMap();
+    useEffect(() => {
+      if (!bounds) return;
+      try { map.fitBounds(bounds, { padding: [20, 20] }); } catch {}
+    }, [map, bounds]);
+    return null;
+  }
+
+  const groups = useMemo(() => {
+    const m = new Map();
+    (projects || []).forEach((p) => {
+      const city = (p.city || "").trim();
+      if (!city) return;
+      if (!m.has(city)) m.set(city, []);
+      m.get(city).push(p);
+    });
+    return m;
+  }, [projects]);
+
+  const markers = useMemo(() => {
+    const res = [];
+    groups.forEach((list, city) => {
+      const coords = CITY_COORDS[city];
+      if (coords) res.push({ city, lat: coords[0], lng: coords[1], projects: list });
+    });
+    return res;
+  }, [groups]);
+
+  const bounds = useMemo(() => {
+    if (!markers.length) return L.latLngBounds([[61, 72], [61, 72]]);
+    return L.latLngBounds(markers.map((m) => [m.lat, m.lng]));
+  }, [markers]);
+
+  const pinDefault = useMemo(() => createPinIcon(16, GOLD), []);
+  const pinHover   = useMemo(() => createPinIcon(20, "#fde68a"), []);
+
+  return (
+    <div className="relative w-full h-[420px] md:h-[520px] bg-[#f3f3f3] border border-neutral-200 overflow-hidden">
+      <style>{`
+        .kub-pin,
+        .kub-pin.leaflet-div-icon { background: transparent !important; border: none !important; box-shadow: none !important; }
+        .leaflet-container .leaflet-tooltip {
+          background: rgba(17,17,17,0.92);
+          color: #fff;
+          border: 1px solid #222;
+          border-radius: 8px;
+          box-shadow: 0 8px 20px rgba(0,0,0,.35);
+          padding: 8px 10px;
+        }
+        .leaflet-container .leaflet-tooltip-top:before { border-top-color: rgba(17,17,17,0.92); }
+      `}</style>
+
+      <MapContainer
+        center={[61, 72]}
+        zoom={4}
+        style={{ width: "100%", height: "100%" }}
+        scrollWheelZoom={false}
+        preferCanvas
+        attributionControl={false}
+      >
+        <TileLayer url={TILE_LIGHT_NO_LABELS} attribution={MAP_ATTR} />
+
+        {/* затемнение тайлов (ниже маркеров) */}
+        <Pane name="kub-dim" style={{ zIndex: 350 }}>
+          <Rectangle
+            bounds={[[-90, -180], [90, 180]]}
+            pathOptions={{ color: undefined, fillColor: "#000", fillOpacity: 0.14, weight: 0 }}
+          />
+        </Pane>
+
+        <FitBounds bounds={bounds} />
+
+        {markers.map((m) => (
+          <React.Fragment key={m.city}>
+            {/* подпись города — чуть левее и выше пина */}
+            <Marker position={[m.lat, m.lng]} icon={createCityLabelIcon(m.city)} zIndexOffset={1000} />
+            {/* пин + тултип/попап */}
+            <Marker
+              position={[m.lat, m.lng]}
+              icon={pinDefault}
+              eventHandlers={{
+                mouseover: (e) => e.target.setIcon(pinHover),
+                mouseout:  (e) => e.target.setIcon(pinDefault),
+              }}
+            >
+              <Tooltip direction="top" offset={[0, -10]} opacity={1} sticky>
+                <div className="space-y-1">
+                  <div className="font-semibold">{m.city}</div>
+                  <div className="text-xs opacity-70">{m.projects.length} проект(а)</div>
+                  <ul className="text-xs mt-1 list-disc ml-4">
+                    {m.projects.slice(0, 4).map((p, idx) => (
+                      <li key={p.title + idx}>{p.title}</li>
+                    ))}
+                  </ul>
+                </div>
+              </Tooltip>
+              <Popup>
+                <div className="space-y-1">
+                  <div className="font-semibold">{m.city}</div>
+                  <div className="text-xs opacity-70">{m.projects.length} проект(а)</div>
+                  <ul className="text-xs mt-1 list-disc ml-4">
+                    {m.projects.slice(0, 6).map((p, idx) => (
+                      <li key={p.title + idx}>{p.title}</li>
+                    ))}
+                  </ul>
+                </div>
+              </Popup>
+            </Marker>
+          </React.Fragment>
+        ))}
+      </MapContainer>
+    </div>
+  );
+}
+
+
 /* ---------------- ABOUT ---------------- */
 function About({ sectionRef }) {
   const fade = useEndFade(sectionRef, 25, 75);
@@ -1002,10 +1296,18 @@ function About({ sectionRef }) {
     { value:"100%", label:"соответствие НТД" },
   ],[]);
   return (
-    <section id="about" ref={sectionRef} className="scroll-mt-20 py-24 bg-white" style={{ filter:`grayscale(${fade})`, opacity:`${1 - fade*0.6}` }}>
+    <section id="about" ref={sectionRef} className="scroll-mt-20 py-24 bg-white"
+             style={{ filter:`grayscale(${fade})`, opacity:`${1 - fade*0.6}` }}>
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <h2 className="sr-only">О компании</h2>
-        <p className="max-w-3xl text-neutral-600">Проектируем, строим и обслуживаем инженерные системы любой сложности. Сфокусированы на качестве, прозрачности и сроках.</p>
+
+        {/* одна строка, центр; шрифт/размер как был */}
+        <div className="overflow-x-auto flex justify-center">
+          <p className="inline-block whitespace-nowrap text-neutral-600">
+            Проектируем, строим и обслуживаем инженерные системы любой сложности. Сфокусированы на качестве, прозрачности и сроках.
+          </p>
+        </div>
+
         <div className="mt-10 grid grid-cols-2 md:grid-cols-4 gap-6">
           {facts.map((f,i)=>(
             <div key={i} className="border border-neutral-200 bg-white p-6 text-center rounded-md">
@@ -1017,7 +1319,7 @@ function About({ sectionRef }) {
 
         {/* карта во всю ширину окна */}
         <div className="mt-10 relative left-1/2 right-1/2 -ml-[50vw] -mr-[50vw] w-screen">
-          <img src="/map.png" alt="География проектов" className="w-full h-[420px] md:h-[520px] object-cover"/>
+          <CompanyMap projects={projects} />
         </div>
       </div>
     </section>
@@ -1072,6 +1374,7 @@ function SiteFooter() {
         <div className="flex items-center gap-6 text-sm">
           <span className="text-neutral-400 hover:text-amber-400 transition-colors cursor-default">ИНН: 7700000000</span>
           <span className="text-neutral-400 hover:text-amber-400 transition-colors cursor-default">ОГРН: 1207700000000</span>
+          <span className="text-neutral-400 hover:text-amber-400 transition-colors cursor-default">Карта: данные OpenStreetMap, плитки CARTO</span>
         </div>
         <button onClick={()=>{window.history.pushState({}, "", "/");window.scrollTo({top:0,behavior:"smooth"});}}
           className="relative group inline-flex items-center gap-2 text-neutral-300 hover:text-amber-400 transition-colors" aria-label="Наверх">
@@ -1105,16 +1408,28 @@ export default function App() {
   const activeId = useActiveTopTitle(sections, 0.42, {}, { services: "services-first" });
   const [serviceStep, setServiceStep] = useState(0);
 
-  // Loader — минимум 1.8s
-  const [loading, setLoading] = useState(true);
+  // Loader: минимум 1.8s + предзагрузка webp
   useEffect(() => {
     const MIN_MS = 1800;
     const started = Date.now();
-    const finish = () => { const remain = MIN_MS - (Date.now() - started); setTimeout(() => setLoading(false), Math.max(0, remain)); };
-    if (document.readyState === "complete") finish(); else window.addEventListener("load", finish, { once: true });
-    const hardStop = setTimeout(() => setLoading(false), MIN_MS + 4000);
-    return () => clearTimeout(hardStop);
+    const heroBases = ["/image1-1920", ...servicesData.map(s => s.image)];
+    const heroWebp = heroBases.map(b => `${b}.webp`);
+    const projectFirstWebp = projects.map(p => toOptimized(p.images[0] || "").webp);
+    const all = Array.from(new Set([...heroWebp, ...projectFirstWebp]));
+    (async () => {
+      await preloadImages(all, 2500);
+      const remain = MIN_MS - (Date.now() - started);
+      setTimeout(() => setLoading(false), Math.max(0, remain));
+    })();
   }, []);
+
+  // небольшая предзагрузка первых 3 карточек «Проекты» (JPG fallback)
+  useEffect(() => {
+    const first = projects.slice(0, 3).map(p => toOptimized(p.images[0] || "").jpg);
+    first.forEach((href) => { if (!href) return; const link = document.createElement("link"); link.rel = "preload"; link.as = "image"; link.href = href; document.head.appendChild(link); });
+  }, []);
+
+  const [loading, setLoading] = useState(true);
 
   // простая «сессия»
   const [userEmail, setUserEmail] = useState(()=>{
@@ -1126,18 +1441,18 @@ export default function App() {
   // индекс поиска
   const indexForSearch = useMemo(() => {
     const svc = servicesData.map((s) => ({
-      title: s.title, subtitle: s.blurb, image: s.image,
+      title: s.title, subtitle: s.blurb, image: `${s.image}.jpg`,
       _keys:[s.title, s.blurb, ...s.details].map(t=>t.toLowerCase()),
       onSelect: () => { window.history.pushState({}, "", "/services"); document.getElementById(s.id)?.scrollIntoView({behavior:"smooth",block:"center"}); }
     }));
     const prj = projects.map((p) => ({
-      title: p.title, subtitle: `${p.city} • ${p.tag}`, image: p.images[0], badge: p.isNew ? "new" : undefined,
+      title: p.title, subtitle: `${p.city} • ${p.tag}`, image: toOptimized(p.images[0] || "").jpg, badge: p.isNew ? "new" : undefined,
       _keys:[p.title, p.city, p.tag, ...p.tags].map(t=>t.toLowerCase()),
       onSelect: () => { window.history.pushState({}, "", "/projects"); document.getElementById("projects")?.scrollIntoView({behavior:"smooth",block:"start"}); }
     }));
     const staticPages = [
-      { title:"О нас", subtitle:"О компании", image:"/image1.png", _keys:["о нас","о компании","about"], onSelect:()=>{window.history.pushState({}, "", "/about"); document.getElementById("about")?.scrollIntoView({behavior:"smooth"});} },
-      { title:"Контакты", subtitle:"+7 (912) 911-20-00", image:"/image1.png", _keys:["контакты","связаться","email","телефон"], onSelect:()=>{window.history.pushState({}, "", "/contact"); document.getElementById("contact")?.scrollIntoView({behavior:"smooth"});} },
+      { title:"О нас", subtitle:"О компании", image:"/image1-1920.jpg", _keys:["о нас","о компании","about"], onSelect:()=>{window.history.pushState({}, "", "/about"); document.getElementById("about")?.scrollIntoView({behavior:"smooth"});} },
+      { title:"Контакты", subtitle:"+7 (912) 911-20-00", image:"/image1-1920.jpg", _keys:["контакты","связаться","email","телефон"], onSelect:()=>{window.history.pushState({}, "", "/contact"); document.getElementById("contact")?.scrollIntoView({behavior:"smooth"});} },
     ];
     return [...svc, ...prj, ...staticPages];
   }, []);
