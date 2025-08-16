@@ -184,7 +184,7 @@ function AuthModal({ open, onClose, onLogin }) {
   const ref = useRef(null);
   useClickOutside(ref, () => open && onClose());
 
-  const [mode, setMode] = useState("login");
+  const [mode, setMode] = useState("login"); // login | register | reset
   const [email, setEmail] = useState("");
   const [pwd, setPwd] = useState("");
   const [confirm, setConfirm] = useState("");
@@ -196,7 +196,11 @@ function AuthModal({ open, onClose, onLogin }) {
   const shakeNow = (msg) => { setError(msg); setShakeKey((k) => k + 1); };
 
   useEffect(() => {
-    if (!open) { setMode("login"); setEmail(""); setPwd(""); setConfirm(""); setError(""); setSent(false); setResetSent(false); }
+    if (!open) {
+      setMode("login");
+      setEmail(""); setPwd(""); setConfirm("");
+      setError(""); setSent(false); setResetSent(false);
+    }
   }, [open]);
 
   const strongEnough = /[A-Z]/.test(pwd) && /[^A-Za-z0-9]/.test(pwd) && pwd.length >= 8;
@@ -251,23 +255,39 @@ function AuthModal({ open, onClose, onLogin }) {
   return (
     <AnimatePresence>
       {open && (
-        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className={wrapCls}>
+        <motion.div
+          initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+          className={wrapCls}
+        >
           <motion.div
             ref={ref}
             initial={{ y: 22, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: 22, opacity: 0 }}
             transition={{ type: "spring", stiffness: 260, damping: 24 }}
             className={panelCls}
           >
-            <div className="px-8 pt-7 pb-2">
-              <button onClick={onClose} aria-label="Закрыть" className="absolute right-4 top-4 text-neutral-500 hover:text-white">
+            {/* HEADER */}
+            <div className="px-8 pt-7 pb-2 relative">
+              <button
+                onClick={onClose}
+                aria-label="Закрыть"
+                className="absolute right-4 top-4 text-neutral-500 hover:text-white"
+              >
                 <X className="w-5 h-5" />
               </button>
-              <div className="grid place-items-center">
-                <span
-                  className="block h-10 w-20"
-                  style={{ WebkitMask:`url(${loaderLogo}) center / contain no-repeat`, mask:`url(${loaderLogo}) center / contain no-repeat`, backgroundColor:"#fff" }}
-                />
-              </div>
+
+              {/* ЛОГОРАЗМЕР как в шапке: h-16 w-28 и тот же знак */}
+<div className="grid place-items-center">
+  <span
+    className="block h-16 w-28 mb-5 md:mb-6"
+    style={{
+      WebkitMask: `url(${logo}) center / contain no-repeat`,
+      mask: `url(${logo}) center / contain no-repeat`,
+      backgroundColor: "#fff",
+    }}
+    aria-label="КУБ"
+  />
+</div>
+
               <div className={titleCls}>
                 {mode === "login" && "Вход"}
                 {mode === "register" && "Регистрация"}
@@ -275,13 +295,17 @@ function AuthModal({ open, onClose, onLogin }) {
               </div>
             </div>
 
+            {/* BODY */}
             <div className="px-8 pb-7 space-y-5">
+              {/* LOGIN */}
               {mode === "login" && (
                 <form onSubmit={doLogin} className="space-y-4">
-                  <div className={fieldWrap}><Mail className={iconCls} size={18} />
+                  <div className={fieldWrap}>
+                    <Mail className={iconCls} size={18} />
                     <input type="email" value={email} onChange={(e)=>setEmail(e.target.value)} className={fieldCls} placeholder="Почта" autoFocus />
                   </div>
-                  <div className={fieldWrap}><Lock className={iconCls} size={18} />
+                  <div className={fieldWrap}>
+                    <Lock className={iconCls} size={18} />
                     <input type="password" value={pwd} onChange={(e)=>setPwd(e.target.value)} className={fieldCls} placeholder="Пароль" />
                   </div>
                   <AnimatePresence>
@@ -295,7 +319,9 @@ function AuthModal({ open, onClose, onLogin }) {
                       </motion.div>
                     )}
                   </AnimatePresence>
-                  <button type="submit" className={goldBtn}>Войти <ArrowRight className="w-5 h-5" /></button>
+                  <button type="submit" className={goldBtn}>
+                    Войти <ArrowRight className="w-5 h-5" />
+                  </button>
                   <div className="pt-2 flex flex-col items-center gap-2">
                     <div className="text-sm text-neutral-400">
                       Впервые на сайте?{" "}
@@ -306,15 +332,19 @@ function AuthModal({ open, onClose, onLogin }) {
                 </form>
               )}
 
+              {/* REGISTER */}
               {mode === "register" && (!sent ? (
                 <form onSubmit={doRegister} className="space-y-4">
-                  <div className={fieldWrap}><Mail className={iconCls} size={18} />
+                  <div className={fieldWrap}>
+                    <Mail className={iconCls} size={18} />
                     <input type="email" value={email} onChange={(e)=>setEmail(e.target.value)} className={fieldCls} placeholder="Почта" autoFocus />
                   </div>
-                  <div className={fieldWrap}><Lock className={iconCls} size={18} />
+                  <div className={fieldWrap}>
+                    <Lock className={iconCls} size={18} />
                     <input type="password" value={pwd} onChange={(e)=>setPwd(e.target.value)} className={fieldCls} placeholder="Пароль" />
                   </div>
-                  <div className={fieldWrap}><Lock className={iconCls} size={18} />
+                  <div className={fieldWrap}>
+                    <Lock className={iconCls} size={18} />
                     <input type="password" value={confirm} onChange={(e)=>setConfirm(e.target.value)} className={fieldCls} placeholder="Повторите пароль" />
                   </div>
                   <AnimatePresence>
@@ -328,7 +358,9 @@ function AuthModal({ open, onClose, onLogin }) {
                       </motion.div>
                     )}
                   </AnimatePresence>
-                  <button type="submit" className={goldBtn}>Зарегистрироваться <ArrowRight className="w-5 h-5" /></button>
+                  <button type="submit" className={goldBtn}>
+                    Зарегистрироваться <ArrowRight className="w-5 h-5" />
+                  </button>
                   <div className="text-sm text-neutral-400 text-center">
                     Уже есть аккаунт?{" "}
                     <button type="button" onClick={()=>{setMode("login"); setError("");}} className={linkGold}>Войти</button>
@@ -336,15 +368,23 @@ function AuthModal({ open, onClose, onLogin }) {
                 </form>
               ) : (
                 <div className="space-y-4 text-center">
-                  <div className="text-neutral-200">Мы отправили письмо на <b>{email}</b> для подтверждения.</div>
-                  <button onClick={confirmEmail} className={goldBtn}>Я перешёл(ла) по ссылке <ArrowRight className="w-5 h-5" /></button>
-                  <button type="button" onClick={()=>setMode("login")} className={helpLink + " block mx-auto"}>Вернуться к входу</button>
+                  <div className="text-neutral-200">
+                    Мы отправили письмо на <b>{email}</b> для подтверждения.
+                  </div>
+                  <button onClick={confirmEmail} className={goldBtn}>
+                    Я перешёл(ла) по ссылке <ArrowRight className="w-5 h-5" />
+                  </button>
+                  <button type="button" onClick={()=>setMode("login")} className={helpLink + " block mx-auto"}>
+                    Вернуться к входу
+                  </button>
                 </div>
               ))}
 
+              {/* RESET */}
               {mode === "reset" && (!resetSent ? (
                 <form onSubmit={doReset} className="space-y-4">
-                  <div className={fieldWrap}><Mail className={iconCls} size={18} />
+                  <div className={fieldWrap}>
+                    <Mail className={iconCls} size={18} />
                     <input type="email" value={email} onChange={(e)=>setEmail(e.target.value)} className={fieldCls} placeholder="Почта для восстановления" autoFocus />
                   </div>
                   <AnimatePresence>
@@ -358,13 +398,21 @@ function AuthModal({ open, onClose, onLogin }) {
                       </motion.div>
                     )}
                   </AnimatePresence>
-                  <button type="submit" className={goldBtn}>Отправить <ArrowRight className="w-5 h-5" /></button>
-                  <button type="button" onClick={()=>setMode("login")} className={helpLink + " block mx-auto"}>Вернуться к входу</button>
+                  <button type="submit" className={goldBtn}>
+                    Отправить <ArrowRight className="w-5 h-5" />
+                  </button>
+                  <button type="button" onClick={()=>setMode("login")} className={helpLink + " block mx-auto"}>
+                    Вернуться к входу
+                  </button>
                 </form>
               ) : (
                 <div className="space-y-4 text-center">
-                  <div className="text-neutral-200">Письмо для восстановления отправлено на <b>{email}</b>.</div>
-                  <button type="button" onClick={()=>setMode("login")} className={goldBtn}>К окну входа <ArrowRight className="w-5 h-5" /></button>
+                  <div className="text-neutral-200">
+                    Письмо для восстановления отправлено на <b>{email}</b>.
+                  </div>
+                  <button type="button" onClick={()=>setMode("login")} className={goldBtn}>
+                    К окну входа <ArrowRight className="w-5 h-5" />
+                  </button>
                 </div>
               ))}
             </div>
@@ -407,7 +455,7 @@ function Nav({ navigate, activeId, serviceStep, indexForSearch, onOpenAuth, user
 
   return (
     <header className="fixed top-0 left-0 right-0 z-50 bg-black">
-      {/* локальные стили: эффект «из центра» — две шторки расходятся к бокам */}
+      {/* локальные стили: эффект «из центра» — две шторки расходятся к краям */}
       <style>{`
         .kub-reveal{ position:relative; display:inline-block; }
         .kub-reveal::before, .kub-reveal::after{
@@ -422,25 +470,29 @@ function Nav({ navigate, activeId, serviceStep, indexForSearch, onOpenAuth, user
 
       {/* desktop */}
       <div className="hidden md:grid h-20 w-full grid-cols-[auto,1fr,auto] items-center">
-        {/* ЛОГО + “КУБ”: справа, чуть дальше (чтобы ровно), крупнее; появление из центра */}
+        {/* ЛОГО + “КУБ”: справа, чуть смещён правее; открытие из центра */}
         <a
           href="/"
           onClick={(e)=>{e.preventDefault();navigate("/",null);}}
           className="group relative flex items-center pl-3"
         >
           <span className="relative block">
-            {/* логотип — золотится при hover */}
             <span
               className="block h-16 w-28 bg-white transition-colors duration-150 group-hover:bg-amber-400"
               style={{ WebkitMask:`url(${logo}) center / contain no-repeat`, mask:`url(${logo}) center / contain no-repeat` }}
               aria-label="КУБ"
             />
-            {/* “КУБ” — сразу справа, чуть сдвинут направо (-ml-5), без подчёркиваний */}
             <span
               className="pointer-events-none absolute left-full -ml-5 top-1/2 -translate-y-1/2 z-[2]
                          opacity-0 scale-95 group-hover:opacity-100 group-hover:scale-100
                          transition-all duration-300"
-              style={{ fontFamily: "'Arial Narrow', Arial, 'Inter', sans-serif", color: "#fbbf24", fontWeight: 800, fontSize: "28px", letterSpacing: ".2px" }}
+              style={{
+                fontFamily: `'Jost', 'Montserrat', 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif`,
+                fontWeight: 200,         // <<< стало тоньше
+                fontSize: "28px",
+                letterSpacing: "0.15em",
+                color: "#fbbf24"
+              }}
             >
               <span className="kub-reveal">КУБ</span>
             </span>
@@ -564,7 +616,9 @@ function Nav({ navigate, activeId, serviceStep, indexForSearch, onOpenAuth, user
           {/* CART */}
           <div className="relative group flex items-center">
             <svg viewBox="0 0 24 24" className="w-5 h-5 text-neutral-200 group-hover:text-amber-400 transition-colors" fill="none">
-              <path d="M6 6h15l-1.5 9h-12L6 6Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/><circle cx="9" cy="20" r="1.5" fill="currentColor"/><circle cx="18" cy="20" r="1.5" fill="currentColor"/>
+              <path d="M6 6h15l-1.5 9h-12L6 6Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+              <circle cx="9" cy="20" r="1.5" fill="currentColor"/>
+              <circle cx="18" cy="20" r="1.5" fill="currentColor"/>
             </svg>
             <TooltipPill label="Корзина" />
           </div>
@@ -621,7 +675,7 @@ const toOptimized = (src) => {
   return { webp: `${base}-1200.webp`, jpg: `${base}-1200.jpg` };
 };
 
-/* ---------------- Service Overlay ---------------- */
+
 /* ---------------- Service Overlay ---------------- */
 function ServiceOverlay({ openId, onClose }) {
   const ref = useRef(null);
